@@ -24,10 +24,17 @@ are kept locally so you can open the app and fix the transcript manually.
 
 Recordings stay on your Mac. Transcription runs in the cloud, with your own Deepgram or OpenAI key.
 
-## Build it
+## Install
 
-You need an Apple Silicon Mac on macOS 14.2 or later, Xcode 15 or later, and
-[XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`).
+Download [LoudFlow.dmg](../../releases/latest/download/LoudFlow.dmg), open it, and drag LoudFlow to Applications.
+
+You need an Apple Silicon Mac on macOS 14.2 or later, and a [Deepgram](https://console.deepgram.com) or OpenAI API key.
+
+The first time you open LoudFlow, macOS will block it, because it isn't signed with a paid Apple developer account. Click Done, then go to System Settings › Privacy & Security, scroll down and click Open Anyway. You only do this once.
+
+### Or build it yourself
+
+You need Xcode 15 or later and [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`).
 
 ```sh
 ./scripts/fetch-assets.sh     # downloads Nunito and the Solar icons, once

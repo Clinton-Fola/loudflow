@@ -4,10 +4,12 @@
 # currently in /Applications. Uses dmgbuild (writes the .DS_Store directly — no Finder
 # scripting, so it won't hang on automation prompts).
 #
+#   scripts/make-dmg.sh [app] [output.dmg]
+#
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-APP="/Applications/LoudFlow.app"
+APP="${1:-/Applications/LoudFlow.app}"
 VER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Contents/Info.plist")
 
 echo "==> Rendering background…"
@@ -20,7 +22,7 @@ if [ ! -x .dmgvenv/bin/dmgbuild ]; then
   .dmgvenv/bin/pip install --quiet dmgbuild
 fi
 
-OUT="$HOME/Desktop/LoudFlow-$VER.dmg"
+OUT="${2:-$HOME/Desktop/LoudFlow-$VER.dmg}"
 rm -f "$OUT"
 echo "==> Building $OUT …"
 .dmgvenv/bin/dmgbuild \

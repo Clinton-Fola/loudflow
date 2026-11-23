@@ -96,6 +96,8 @@ rm -rf "$APP"
 ditto "$TEMPLATE" "$APP"
 rm -rf "$APP/Contents/_CodeSignature"
 cp "$OUT/LoudFlow" "$APP/Contents/MacOS/LoudFlow"
+# Debug entries carry this Mac's folder paths. The app doesn't need them.
+strip -S "$APP/Contents/MacOS/LoudFlow" 2>/dev/null
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VER" -c "Set :CFBundleVersion $BUILD" "$APP/Contents/Info.plist"
 
 # Keep one code identity across builds so macOS can keep the Accessibility grant.
