@@ -5,71 +5,69 @@ you're using. Click it (or hold a key / double-tap Control), talk, and when you 
 types the **raw transcript** straight into the field your cursor is in. Audio and transcript
 are kept locally so you can open the app and fix the transcript manually.
 
----
+![A note in another app, just after LoudFlow typed the words into it](docs/dictation.webp)
 
-## Build & run
+![LoudFlow's window: the library, with a meeting transcript open](docs/window.webp)
 
-Prerequisites: macOS 14.2+, Xcode 15+, and [XcodeGen](https://github.com/yonaskolb/XcodeGen)
-(`brew install xcodegen`).
+## What you can do with it
 
-```bash
-./scripts/fetch-assets.sh     # downloads Nunito + the Solar icons (one time)
+- Dictate into any app. The words land where your cursor is.
+- Start by clicking the widget, holding ⌥Space, or double-tapping Control.
+- Record a call or a meeting. It hears both sides and labels each speaker.
+- Name a voice once and it's suggested the next time that person turns up.
+- Play any recording back and fix its transcript.
+- Search every transcript.
+- Save the names and terms it keeps mishearing, so they come back spelled right.
+- Dictate in a mix of languages.
+- Keep audio for 7 days, 30 days or forever. Transcripts stay either way.
+- See how much typing it saved you.
+
+Recordings stay on your Mac. Transcription runs in the cloud, with your own Deepgram or OpenAI key.
+
+## Build it
+
+You need an Apple Silicon Mac on macOS 14.2 or later, Xcode 15 or later, and
+[XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`).
+
+```sh
+./scripts/fetch-assets.sh     # downloads Nunito and the Solar icons, once
 xcodegen generate             # writes LoudFlow.xcodeproj
-open LoudFlow.xcodeproj        # then run with ⌘R
+open LoudFlow.xcodeproj       # then run with ⌘R
 ```
 
-### Permissions the app asks for
-- **Microphone** — to record. Prompted on first record.
-- **Accessibility** (System Settings → Privacy & Security → Accessibility) — required for the
-  global hold/double-tap hotkeys and for typing the transcript into other apps. The app opens
-  the pane for you and explains why. Without it, only "click the widget" + "clipboard only"
-  work.
+No Xcode? Once a copy of LoudFlow is in /Applications, `./scripts/build-without-xcode.sh`
+rebuilds and reinstalls it with only the Command Line Tools.
 
-The app is intentionally **not sandboxed** — the sandbox blocks global hotkeys and cross-app
-text insertion. See `Resources/LoudFlow.entitlements`.
+### If you rebuild often
 
-### Transcription key
-LoudFlow uses **Deepgram** (Nova-3, with Deepgram's current diarizer) by default. Onboarding
-step 3 asks for your API key (nothing transcribes without one); you can change it later in
-**Settings → Transcription**. The key is stored in the **macOS Keychain**, never in preferences.
-OpenAI (`gpt-transcribe`) is the alternative provider; it has no speaker labels and a 25 MB
-upload limit. Both sit behind the `Transcriber` protocol (`Sources/LoudFlow/Transcription/`).
+macOS forgets the Accessibility permission each time the app is rebuilt, unless it's signed the
+same way every time. `./scripts/dev-signing-setup.sh` makes a self-signed identity once, and
+`./scripts/dev-build.sh` builds, signs with it and installs.
 
----
+## What it asks for
 
-## Architecture
+- The microphone, the first time you record.
+- Accessibility (System Settings › Privacy & Security › Accessibility), for the shortcuts and for typing into other apps. Without it you can still click the widget and paste from the clipboard.
+- System Audio Recording, the first time it records a call, to hear the other side.
 
-```
-Sources/LoudFlow/
-  LoudFlowApp.swift        @main — app lifecycle, main window, floating widget panel (no menu-bar item)
-  App/                     AppModel (central state), Persistence (JSON + audio), Keychain, Preferences
-  Audio/                   AudioRecorder (→ .m4a on disk), AudioPlayer (progress)
-  Transcription/           Transcriber protocol, DeepgramTranscriber, WhisperTranscriber (OpenAI), TurnBuilder, TranscriptionQueue
-  Input/                   HotkeyManager (⌥Space hold / ⌃⌃ double-tap), TextInserter, Permissions
-  Widget/                  WidgetPanel (borderless NSPanel), WidgetView (idle/recording/transcribing/error/queued)
-  Windows/                 MainWindow, Sidebar, TodayView, LibraryView, SettingsView, ReceiptsView
-  Onboarding/              OnboardingView (4 steps)
-  DesignSystem/            Theme, Typography, SolarIcon, Components
-Resources/                 Info.plist, entitlements, Assets.xcassets, Fonts
-```
+The app isn't sandboxed, because the sandbox blocks global shortcuts and typing into other apps.
 
-Data lives in `~/Library/Application Support/LoudFlow/` — `clips.json` (transcript index) plus
-`audio/*.m4a`. Retention sweeps delete audio past the chosen window while **keeping
-transcripts**.
+## Transcription key
 
-### Two decisions the spec left to the implementer
-- **Deleting a clip asks first.** Deletion removes both audio and transcript with no undo, so
-  the Delete button flips to an inline "Delete / Cancel" confirm before it acts.
-- **Retention sweeps run on launch, when the app becomes active, and every 6 hours.** Each
-  sweep deletes audio older than the window (7 / 30 days) and keeps the transcript;
-  "Forever" never sweeps. Provider-side deletion is immediate per transcription (zero
-  retention), independent of this.
+LoudFlow uses Deepgram (Nova-3) by default. Setup asks for your API key, and nothing transcribes
+without one. You can change it later in Settings › Transcription. The key is stored in the macOS
+Keychain. OpenAI (`gpt-transcribe`) is the other choice. It has no speaker labels and a 25 MB
+upload limit.
 
----
+Audio is sent with a zero-retention request, so the provider doesn't keep it.
 
-## Design fidelity
+## The code
 
-Colors, type, spacing, radii, shadows, and animation timings come verbatim from the design
-handoff and live in `DesignSystem/Theme.swift`, `Typography.swift`, and `Components.swift`.
-Copy is used verbatim. The only net-new copy — the widget error states and the onboarding
-key step — is called out in the source and easy to change.
+- `Sources/LoudFlow/App` is the app's state, the library on disk, the Keychain and voices.
+- `Audio` records the microphone and the call, and plays recordings back.
+- `Transcription` talks to Deepgram and OpenAI and turns their answers into speaker turns.
+- `Input` is the shortcuts, permissions and typing into other apps.
+- `Widget` is the floating pill. `Windows` is everything in the main window.
+- `DesignSystem` holds the colours, type and components.
+
+The library lives in `~/Library/Application Support/LoudFlow/`: `clips.json` and an `audio` folder.
