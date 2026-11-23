@@ -10,8 +10,8 @@ options:
 settings:
   base:
     # Semantic version MAJOR.MINOR.PATCH. Bump MINOR per feature batch, PATCH per fix.
-    MARKETING_VERSION: "1.7.1"
-    CURRENT_PROJECT_VERSION: "15"
+    MARKETING_VERSION: "1.8.0"
+    CURRENT_PROJECT_VERSION: "16"
     SWIFT_VERSION: "5.9"
     # Apple silicon only. Every build so far has been arm64, and FluidAudio's speech models use
     # Float16, which doesn't exist on Intel Macs.
@@ -66,10 +66,11 @@ targets:
   LoudFlowTests:
     type: bundle.unit-test
     platform: macOS
-    # The transcription logic only needs Foundation, so the tests compile it directly rather than
-    # launching the app, which would open your real library.
+    # Compile the recording and transcription code directly so tests never open the real library.
     sources:
       - path: Tests/LoudFlowTests
+      - path: Sources/LoudFlow/Audio/AudioRecorder.swift
+      - path: Sources/LoudFlow/Audio/SystemAudioTap.swift
       - path: Sources/LoudFlow/Transcription/Turn.swift
       - path: Sources/LoudFlow/Transcription/TurnBuilder.swift
       - path: Sources/LoudFlow/Transcription/Transcriber.swift

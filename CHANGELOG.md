@@ -7,6 +7,34 @@ two stay in step.
 Each release names the **design version** it implements. That number is also compiled into the
 build as `DesignVersion.current` and shown in the sidebar footer.
 
+## 1.8.0 — 2026-11-22 — design 5
+
+Transcription accuracy, second round. Not a design update.
+
+### Added
+
+- **Names and terminology.** A field in Settings → Transcription for names and terms that keep
+  coming back misspelled. They go with each recording as Deepgram key terms, or as OpenAI
+  keywords (a prompt on `whisper-1`). With Deepgram the terms are also redacted from the usage
+  records (`redact_usage=true`).
+- **Recognize mixed-language speech** (Deepgram only, off by default). Sends `language=multi`
+  for dictation that switches between languages.
+- `scripts/build-without-xcode.sh` builds and installs with only the Command Line Tools, for a
+  Mac that has no Xcode. Icons and fonts are taken from the copy already in /Applications.
+
+### Changed
+
+- **Solo dictation keeps Deepgram's own formatting.** One voice on one track now uses the
+  formatted transcript instead of text rebuilt word by word, so times, numbers and punctuation
+  come through as Deepgram wrote them.
+- **Quiet mics are lifted before upload.** One constant gain, up to 8×, brings a quiet mic track
+  to a normal level. Near-silence and already loud recordings are left alone.
+- **Echo removal needs a phrase, not a word.** A mic word is dropped only when two words in a
+  row match the far side at the same delay, so a "Right." said over the other person, or a
+  "shouldn't" where they said "should", stays in.
+- If one track of a call comes back with text but no word timings, both sides are kept in
+  track order instead of one being lost.
+
 ## 1.7.1 — 2026-10-31 — design 5
 
 Fixes from the platform audit. Not a design update.

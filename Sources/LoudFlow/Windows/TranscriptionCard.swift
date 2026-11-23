@@ -3,6 +3,9 @@ import SwiftUI
 struct TranscriptionCard: View {
     @ObservedObject var model: AppModel
     @State private var keyInput: String = ""
+    @AppStorage(TranscriptionHints.spellingsKey) private var savedSpellings = ""
+    @AppStorage(TranscriptionHints.multilingualKey) private var multilingual = false
+    @State private var spellings = ""
     @State private var infoHovered = false
     @State private var infoPinned = false
     @FocusState private var infoFocused: Bool
@@ -81,12 +84,59 @@ struct TranscriptionCard: View {
             }
             .animation(reduceMotion ? nil : Motion.feedback, value: model.keyStatus)
 
+            if model.provider == .deepgram {
+                Toggle("Recognize mixed-language speech", isOn: $multilingual)
+                    .toggleStyle(.switch)
+                    .tint(Theme.sage)
+                    .font(Typo.font(13, 700))
+                    .foregroundColor(Theme.creamInk)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Names and terminology").font(Typo.font(13, 700)).foregroundColor(Theme.creamInk)
+                HStack(spacing: 8) {
+                    TextField("LoudFlow, Deepgram, …", text: $spellings)
+                        .textFieldStyle(.plain)
+                        .font(Typo.font(14, 400))
+                        .foregroundColor(Theme.ink)
+                        .padding(EdgeInsets(top: 11, leading: 14, bottom: 11, trailing: 14))
+                        .background(RoundedRectangle(cornerRadius: Theme.Radius.editor).fill(Theme.card))
+                        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.editor).stroke(Theme.creamLine2, lineWidth: 1.5))
+                        .accessibilityLabel("Names and terminology")
+                        .onSubmit { if canSaveSpellings { savedSpellings = spellings } }
+                    Button { savedSpellings = spellings } label: {
+                        Text("Save")
+                            .font(Typo.font(13, 800))
+                            .foregroundColor(Theme.cream)
+                            .padding(.horizontal, 18).padding(.vertical, 11)
+                            .background(Capsule().fill(Theme.ink))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!canSaveSpellings)
+                    .opacity(canSaveSpellings ? 1 : 0.5)
+                    .clickable(if: canSaveSpellings)
+                    .accessibilityLabel("Save names and terminology")
+                }
+                Text(validSpellings
+                     ? "Separate with commas. Sent with each recording so they come back spelled this way."
+                     : "Too long, or has < or > in it. Shorten the list.")
+                    .font(Typo.font(12, 400))
+                    .foregroundColor(validSpellings ? Theme.creamMuted : Theme.danger)
+            }
+            .onAppear { spellings = savedSpellings }
+
             audioDestination
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: Theme.Radius.cardSmall).fill(Theme.cream))
     }
+
+    private var validSpellings: Bool {
+        TranscriptionHints(spellings: spellings, multilingual: multilingual) != nil
+    }
+
+    private var canSaveSpellings: Bool { validSpellings && spellings != savedSpellings }
 
     private var audioDestination: some View {
         Button { infoPinned.toggle() } label: {

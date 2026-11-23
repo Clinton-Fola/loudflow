@@ -37,6 +37,31 @@ final class DeepgramResponseTests: XCTestCase {
         XCTAssertEqual(result.turns?.last?.end, 5.7)
     }
 
+    func testSoloDictationKeepsFormattedTranscript() throws {
+        let channels = try decode(#"{"results":{"channels":[{"alternatives":[{"transcript":"At 2:30.","words":[{"word":"at"},{"word":"two"},{"word":"thirty"}]}]}]}}"#)
+        XCTAssertEqual(DeepgramTranscriber.result(from: channels, twoTrack: false).text, "At 2:30.")
+    }
+
+    func testMissingTimingsOnOneTrackPreservesBothSides() throws {
+        let channels = try decode(#"{"results":{"channels":[{"alternatives":[{"words":[{"word":"Hi."}]}]},{"alternatives":[{"transcript":"Hello."}]}]}}"#)
+        XCTAssertEqual(DeepgramTranscriber.result(from: channels, twoTrack: true).text, "Hi. Hello.")
+    }
+
+    func testMixedLanguageAndSpellingsReachProviderRequests() throws {
+        let hints = try XCTUnwrap(TranscriptionHints(spellings: "C++, Ada & Co, c++", multilingual: true))
+        let url = DeepgramTranscriber.endpoint(twoTrack: true, diarizer: "diarize=true", hints: hints)
+        let query = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems)
+        XCTAssertEqual(query.filter { $0.name == "keyterm" }.compactMap(\.value), ["C++", "Ada & Co"])
+        XCTAssertTrue(url.absoluteString.contains("C%2B%2B"))
+        XCTAssertTrue(query.contains(URLQueryItem(name: "language", value: "multi")))
+        XCTAssertTrue(query.contains(URLQueryItem(name: "redact_usage", value: "true")))
+        let body = WhisperTranscriber.multipartBody(boundary: "test", audio: Data(), fileName: "a.m4a",
+                                                   model: "gpt-transcribe", terms: hints.terms)
+        let form = String(decoding: body, as: UTF8.self)
+        XCTAssertTrue(form.contains("name=\"keywords[]\"\r\n\r\nAda & Co\r\n"))
+        XCTAssertNil(TranscriptionHints(spellings: "<tag>", multilingual: true))
+    }
+
     func testTranscriptOnlyResponseFallsBackToPlainText() throws {
         let channels = try decode(#"{"results":{"channels":[{"alternatives":[{"transcript":"  hello there  "}]}]}}"#)
         let result = DeepgramTranscriber.result(from: channels, twoTrack: false)

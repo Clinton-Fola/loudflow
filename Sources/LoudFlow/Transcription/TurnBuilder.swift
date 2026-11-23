@@ -49,37 +49,51 @@ enum TurnBuilder {
         return TranscriptionResult(text: text, turns: Set(turns.map(\.speaker)).count > 1 ? turns : nil)
     }
 
-    // Without headphones the mic also hears the call, so the far side shows up twice.
-    // A mic word that matches a far-side word at about the same moment is that echo.
+    // The mic can pick up the far side through speakers. Confirm a phrase in
+    // order on both tracks before dropping anything from the mic.
     static func removingEcho(from mic: [TimedWord], heard far: [TimedWord]) -> [TimedWord] {
-        guard !mic.isEmpty, !far.isEmpty else { return mic }
+        guard mic.count >= 2, far.count >= 2 else { return mic }
+        let micKeys = mic.map { normalized($0.text) }
         let farKeys = far.map { normalized($0.text) }
-
         var echo = [Bool](repeating: false, count: mic.count)
         var low = 0
-        for (i, word) in mic.enumerated() {
-            let key = normalized(word.text)
-            guard !key.isEmpty else { continue }
-            while low < far.count, far[low].start < word.start - echoWindow { low += 1 }
+
+        for i in 0..<(mic.count - 1) {
+            while low < far.count, far[low].start < mic[i].start - echoWindow { low += 1 }
             var j = low
-            while j < far.count, far[j].start <= word.start + echoWindow {
-                if farKeys[j] == key { echo[i] = true; break }
-                j += 1
+            while j + 1 < far.count, far[j].start <= mic[i].start + echoWindow {
+                defer { j += 1 }
+                let lag = mic[i].start - far[j].start
+                guard !micKeys[i].isEmpty, micKeys[i] == farKeys[j],
+                      !micKeys[i + 1].isEmpty, micKeys[i + 1] == farKeys[j + 1]
+                else { continue }
+
+                // An acoustic echo keeps roughly the same delay for nearby words.
+                func aligned(_ offset: Int) -> Bool {
+                    let m = mic[i + offset], f = far[j + offset]
+                    return abs((m.start - f.start) - lag) <= 0.2
+                        && m.start - mic[i + offset - 1].end < segmentPause
+                        && f.start - far[j + offset - 1].end < segmentPause
+                }
+                guard aligned(1) else { continue }
+                echo[i] = true
+                echo[i + 1] = true
+
+                // Allow one substitution inside a confirmed echo only if the far
+                // side also spoke a word in that slot and both tracks match again.
+                if i + 3 < mic.count, j + 3 < far.count,
+                   aligned(2), aligned(3), !micKeys[i + 3].isEmpty,
+                   micKeys[i + 3] == farKeys[j + 3] {
+                    let local = micKeys[i + 2], remote = farKeys[j + 2]
+                    if local == remote || (min(local.count, remote.count) >= 4
+                        && local.first == remote.first && local.last == remote.last
+                        && local.difference(from: remote).count == 1) {
+                        echo[i + 2] = true
+                        echo[i + 3] = true
+                    }
+                }
             }
         }
-
-        // A word or two the mic misheard inside an echoed stretch is echo too.
-        var i = 0
-        while i < mic.count {
-            guard !echo[i] else { i += 1; continue }
-            var j = i
-            while j < mic.count, !echo[j] { j += 1 }
-            if i > 0, j < mic.count, j - i <= 2, mic[j].start - mic[i - 1].end < 1.5 {
-                for k in i..<j { echo[k] = true }
-            }
-            i = j
-        }
-
         return zip(mic, echo).compactMap { $1 ? nil : $0 }
     }
 

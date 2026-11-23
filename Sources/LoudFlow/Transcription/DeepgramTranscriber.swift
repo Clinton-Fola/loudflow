@@ -9,21 +9,31 @@ struct DeepgramTranscriber: Transcriber {
     private static let diarizer = "diarize_model=latest"
     private static let legacyDiarizer = "diarize=true"
 
-    private func endpoint(twoTrack: Bool, diarizer: String) -> URL {
-        URL(string: "\(Self.base)?\(Self.common)&\(diarizer)\(twoTrack ? "&multichannel=true" : "")")!
+    static func endpoint(twoTrack: Bool, diarizer: String, hints: TranscriptionHints) -> URL {
+        var url = URLComponents(string: "\(base)?\(common)&\(diarizer)")!
+        var items = url.queryItems ?? []
+        if twoTrack { items.append(URLQueryItem(name: "multichannel", value: "true")) }
+        if hints.multilingual { items.append(URLQueryItem(name: "language", value: "multi")) }
+        if !hints.terms.isEmpty {
+            items.append(URLQueryItem(name: "redact_usage", value: "true"))
+            items += hints.terms.map { URLQueryItem(name: "keyterm", value: $0) }
+        }
+        url.queryItems = items
+        url.percentEncodedQuery = url.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
+        return url.url!
     }
 
     private var apiKey: String? { Keychain.key(for: .deepgram) }
 
-    func transcribe(_ audioURL: URL, twoTrack: Bool) async throws -> TranscriptionResult {
+    func transcribe(_ audioURL: URL, twoTrack: Bool, hints: TranscriptionHints) async throws -> TranscriptionResult {
         guard let key = apiKey else { throw TranscriberError.missingKey }
         guard let audio = try? Data(contentsOf: audioURL) else { throw TranscriberError.decoding }
 
         let data: Data
         do {
-            data = try await send(audio, key: key, to: endpoint(twoTrack: twoTrack, diarizer: Self.diarizer))
+            data = try await send(audio, key: key, to: Self.endpoint(twoTrack: twoTrack, diarizer: Self.diarizer, hints: hints))
         } catch TranscriberError.server(400) {
-            data = try await send(audio, key: key, to: endpoint(twoTrack: twoTrack, diarizer: Self.legacyDiarizer))
+            data = try await send(audio, key: key, to: Self.endpoint(twoTrack: twoTrack, diarizer: Self.legacyDiarizer, hints: hints))
         }
 
         guard let decoded = try? JSONDecoder().decode(DeepgramResponse.self, from: data),
@@ -71,14 +81,25 @@ struct DeepgramTranscriber: Transcriber {
             }
         }
 
-        guard timed.contains(where: { !$0.isEmpty }) else {
-            let flat = channels
-                .compactMap { $0.alternatives?.first?.transcript }
-                .joined(separator: " ")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            return .plain(flat)
+        let transcripts = channels.map {
+            ($0.alternatives?.first?.transcript ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        return TurnBuilder.build(channels: timed, twoTrack: twoTrack)
+        // If one side has text but no usable words, timing cannot establish its
+        // place in the conversation. Keep both sides in channel order.
+        if timed.indices.contains(where: { i in
+            !transcripts[i].isEmpty && !timed[i].contains { !$0.text.isEmpty }
+        }) {
+            let parts = timed.indices.map { i in
+                transcripts[i].isEmpty ? timed[i].map(\.text).filter { !$0.isEmpty }.joined(separator: " ") : transcripts[i]
+            }
+            return .plain(parts.filter { !$0.isEmpty }.joined(separator: " "))
+        }
+
+        let result = TurnBuilder.build(channels: timed, twoTrack: twoTrack)
+        if channels.count == 1, result.turns == nil, !transcripts[0].isEmpty {
+            return .plain(transcripts[0])
+        }
+        return result
     }
 }
 

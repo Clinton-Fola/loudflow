@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import Accelerate
 
 final class AudioRecorder: NSObject {
 
@@ -191,12 +192,25 @@ final class AudioRecorder: NSObject {
 
         buffer.frameLength = frames
         copy(micSamples, into: data[0], frames: frames, shift: 0)
+        liftQuietMic(data[0], frames: micSamples.frameLength)
         if channels == 2, let systemSamples {
             copy(systemSamples, into: data[1], frames: frames, shift: shift)
         }
 
         guard (try? out.write(from: buffer)) != nil else { return false }
         return channels == 2
+    }
+
+    // Apply one constant gain before AAC encoding. Leave very faint background
+    // noise alone and keep transient peaks below full scale.
+    static func liftQuietMic(_ samples: UnsafeMutablePointer<Float>, frames: AVAudioFrameCount) {
+        guard frames > 0 else { return }
+        let count = vDSP_Length(frames)
+        var peak: Float = 0
+        vDSP_maxmgv(samples, 1, &peak, count)
+        guard peak > 0.004, peak < 0.7 else { return }
+        var gain = min(8, 0.7 / peak)
+        vDSP_vsmul(samples, 1, &gain, samples, 1, count)
     }
 
     // A positive shift delays the source; a negative one drops its first frames.

@@ -73,6 +73,20 @@ final class TurnBuilderTests: XCTestCase {
         XCTAssertTrue(TurnBuilder.build(channels: [mic, far], twoTrack: true).text.contains("Yes exactly."))
     }
 
+    func testOverlappingSharedWordAndShortReplySurvive() {
+        let far = say("Right call.", from: 0, speaker: 0)
+        let mic = say("Right totally.", from: 0.4, speaker: 0)
+        XCTAssertEqual(TurnBuilder.removingEcho(from: mic, heard: far), mic)
+        let reply = say("Right.", from: 0.5, speaker: 0)
+        XCTAssertEqual(TurnBuilder.removingEcho(from: reply, heard: far), reply)
+    }
+
+    func testUnmatchedNegationBetweenEchoedPhrasesSurvives() {
+        let far = say("I think we should go now.", from: 0, speaker: 0)
+        let mic = say("I think we shouldn't go now.", from: 0.1, speaker: 0)
+        XCTAssertTrue(TurnBuilder.removingEcho(from: mic, heard: far).contains { $0.text == "shouldn't" })
+    }
+
     func testFarSideInterjectionLandsBetweenSentences() {
         let mic = say("First we fix the recorder. Then we ship the model change. After that we write the audit.", from: 0, speaker: 0)
         let far = say("Makes sense.", from: 3.2, speaker: 0)

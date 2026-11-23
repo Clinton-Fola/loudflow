@@ -9,26 +9,26 @@ struct WhisperTranscriber: Transcriber {
     private static let fallbackModel = "whisper-1"
     private static let uploadLimit = 25_000_000
 
-    func transcribe(_ audioURL: URL, twoTrack: Bool) async throws -> TranscriptionResult {
+    func transcribe(_ audioURL: URL, twoTrack: Bool, hints: TranscriptionHints) async throws -> TranscriptionResult {
         guard let key = apiKey else { throw TranscriberError.missingKey }
         guard let audio = try? Data(contentsOf: audioURL) else { throw TranscriberError.decoding }
         guard audio.count < Self.uploadLimit else { throw TranscriberError.tooLarge }
 
         let fileName = audioURL.lastPathComponent
         do {
-            return try await send(audio, fileName: fileName, model: Self.model, key: key)
+            return try await send(audio, fileName: fileName, model: Self.model, key: key, terms: hints.terms)
         } catch TranscriberError.server(let code) where code == 400 || code == 404 {
-            return try await send(audio, fileName: fileName, model: Self.fallbackModel, key: key)
+            return try await send(audio, fileName: fileName, model: Self.fallbackModel, key: key, terms: hints.terms)
         }
     }
 
-    private func send(_ audio: Data, fileName: String, model: String, key: String) async throws -> TranscriptionResult {
+    private func send(_ audio: Data, fileName: String, model: String, key: String, terms: [String]) async throws -> TranscriptionResult {
         let boundary = "loudflow-\(UUID().uuidString)"
         var req = URLRequest(url: endpoint, timeoutInterval: Self.requestTimeout)
         req.httpMethod = "POST"
         req.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        req.httpBody = Self.multipartBody(boundary: boundary, audio: audio, fileName: fileName, model: model)
+        req.httpBody = Self.multipartBody(boundary: boundary, audio: audio, fileName: fileName, model: model, terms: terms)
 
         let (data, response): (Data, URLResponse)
         do {
@@ -53,7 +53,7 @@ struct WhisperTranscriber: Transcriber {
         return (200..<300).contains(http.statusCode)
     }
 
-    private static func multipartBody(boundary: String, audio: Data, fileName: String, model: String) -> Data {
+    static func multipartBody(boundary: String, audio: Data, fileName: String, model: String, terms: [String]) -> Data {
         var body = Data()
         func field(_ name: String, _ value: String) {
             body.append("--\(boundary)\r\n".data(using: .utf8)!)
@@ -62,6 +62,11 @@ struct WhisperTranscriber: Transcriber {
         }
         field("model", model)
         field("response_format", "json")
+        if model == fallbackModel, !terms.isEmpty {
+            field("prompt", terms.joined(separator: ", "))
+        } else {
+            for term in terms { field("keywords[]", term) }
+        }
 
         body.append("--\(boundary)\r\n".data(using: .utf8)!)
         body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(fileName)\"\r\n".data(using: .utf8)!)

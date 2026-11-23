@@ -256,7 +256,7 @@ final class AppModel: ObservableObject {
         transcribingIds.insert(clipID)
         Task {
             do {
-                let result = try await transcriber.transcribe(url, twoTrack: twoTrack)
+                let result = try await transcriber.transcribe(url, twoTrack: twoTrack, hints: .saved)
                 await MainActor.run { self.finishTranscription(clipID: clipID, result: result, insert: insertOnFinish) }
             } catch let e as TranscriberError {
                 await MainActor.run { self.handleTranscribeFailure(clipID: clipID, error: e, insert: insertOnFinish) }
